@@ -19,7 +19,7 @@ function get_specific_file(leading)
 end
 
 local function self_test()
-	tests = {
+	local tests = {
 		'',
 		'ant -f "bacon.xml" stuff',
 		'ant -f cheese.xml stuff',
