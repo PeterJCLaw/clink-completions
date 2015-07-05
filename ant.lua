@@ -64,6 +64,7 @@ local files_parser = parser({
 local ant_parser = parser()
 ant_parser:set_flags({
 	"-verbose",
+	"-q", "-quiet",
 	"-f" .. files_parser
 })
 ant_parser:set_arguments(
