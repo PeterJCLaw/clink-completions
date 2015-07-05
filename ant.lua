@@ -29,6 +29,7 @@ local function self_test()
 		'',
 		'ant -f "bacon.xml" stuff',
 		'ant -f cheese.xml stuff',
+		'ant -f test\\cheese.xml stuff',
 		'ant -file ham.xml stuff',
 		'ant -buildfile spam.xml stuff',
 		'ant nope'
@@ -66,8 +67,11 @@ end
 parser = clink.arg.new_parser
 
 local files_parser = parser({
-	function(word) clink.matches_are_files() return clink.find_dirs(word.."*", false) end,
-	function(word) return clink.find_files(word.."*", false) end
+	function(word)
+        clink.match_files(word.."*", true, clink.find_dirs)
+        clink.match_files(word.."*", true, clink.find_files)
+        clink.matches_are_files()
+	end
 })
 
 local ant_parser = parser()
