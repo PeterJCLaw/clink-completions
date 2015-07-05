@@ -2,7 +2,13 @@
 function get_specific_file(leading)
 	local _, idx = leading:find('-f ')
 	if idx == nil then
-		return 'build.xml'
+		_, idx = leading:find('-buildfile ')
+		if idx == nil then
+			_, idx = leading:find('-file ')
+			if idx == nil then
+				return 'build.xml'
+			end
+		end
 	end
 
 	leading = leading:sub(idx + 1)
@@ -23,6 +29,8 @@ local function self_test()
 		'',
 		'ant -f "bacon.xml" stuff',
 		'ant -f cheese.xml stuff',
+		'ant -file ham.xml stuff',
+		'ant -buildfile spam.xml stuff',
 		'ant nope'
 	}
 	for _, txt in ipairs(tests) do
@@ -30,7 +38,8 @@ local function self_test()
 	end
 end
 
--- self_test()
+--self_test()
+--do return end
 
 function get_targets(filename)
 	local f = io.open(filename, "r")
@@ -63,9 +72,39 @@ local files_parser = parser({
 
 local ant_parser = parser()
 ant_parser:set_flags({
-	"-verbose",
-	"-q", "-quiet",
-	"-f" .. files_parser
+	"-help", "-h",
+	"-projecthelp", "-p",
+	"-version",
+	"-diagnostics",
+
+	"-quiet", "-q",
+	"-silent", "-S",
+	"-verbose", "-v",
+	"-debug", "-d",
+	"-emacs", "-e",
+	"-lib"..files_parser,
+	"-logfile"..files_parser,
+	"-l"..files_parser,
+	"-logger",
+	"-listener",
+	"-noinput",
+	"-buildfile"..files_parser,
+	"-file"..files_parser,
+	"-f"..files_parser,
+	"-D",
+	"-keep-going", "-k",
+
+	"-propertyfile",
+
+	"-inputhandler",
+	"-find",
+	"-s",
+	"-nice",
+
+	"-nouserlib",
+	"-noclasspath",
+	"-autoproxy",
+	"-main"
 })
 ant_parser:set_arguments(
     { get_specific }
