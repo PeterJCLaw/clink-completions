@@ -33,7 +33,10 @@ end
 -- self_test()
 
 function get_targets(filename)
-	local f = assert(io.open(filename, "r"))
+	local f = io.open(filename, "r")
+	if f == nil then
+		return {}
+	end
 	local content = f:read("*all")
 	f:close()
 
