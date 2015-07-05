@@ -1,5 +1,5 @@
 
-function get_specific_file(leading)
+local function get_specific_file(leading)
 	local _, idx = leading:find('-f ')
 	if idx == nil then
 		_, idx = leading:find('-buildfile ')
@@ -41,7 +41,7 @@ end
 --self_test()
 --do return end
 
-function get_targets(filename)
+local function get_targets(filename)
 	local f = io.open(filename, "r")
 	if f == nil then
 		return {}
@@ -57,7 +57,7 @@ function get_targets(filename)
 	return targets
 end
 
-function get_specific(word)
+local function get_specific(word)
 	local leading = rl_state.line_buffer:sub(0, rl_state.first)
 	local filename = get_specific_file(leading)
 	return get_targets(filename)
