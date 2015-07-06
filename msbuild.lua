@@ -12,6 +12,26 @@ if string.ends == nil then
 	end
 end
 
+-- from https://stackoverflow.com/a/15278426
+local function table_concat(t1, t2)
+    for i=1,#t2 do
+        t1[#t1+1] = t2[i]
+    end
+    return t1
+end
+
+--from https://stackoverflow.com/a/12674376/67873
+local function table_keys(tbl)
+	local keyset={}
+	local n=0
+
+	for k,v in pairs(tbl) do
+	  n=n+1
+	  keyset[n]=k
+	end
+	return keyset
+end
+
 local function get_command_line_parts(command_line)
     -- Split the given command line into parts.
     local parts = {}
@@ -92,10 +112,16 @@ local function files_with_extension_generator(extensions)
 	end
 end
 
+local default_targets = {"Clean", "Build", "Rebuild"}
+
 local function get_targets(filename)
+	if filename:ends('.sln') then
+		return default_targets
+	end
+
 	local f = io.open(filename, "r")
 	if f == nil then
-		return {}
+		return default_targets
 	end
 	local content = f:read("*all")
 	f:close()
@@ -103,6 +129,12 @@ local function get_targets(filename)
 	local targets = {}
 	for tgt in content:gmatch('<Target[^>]+Name="([^"]+)"') do
 		table.insert(targets, tgt)
+	end
+
+	-- a VS project file: all the interesting targets are imported
+	-- but we don't search the imports, so add in the defaults anyway
+	if filename:ends('proj') and not filename:ends('.proj') then
+		table_concat(targets, default_targets)
 	end
 
 	return targets
@@ -123,19 +155,13 @@ local function build_targets(word)
 	local leading = rl_state.line_buffer:sub(0, rl_state.first)
 	local filename = get_specific_file(leading)
 	local targets = get_targets(filename)
-	local built = cross_build(target_prefixes, targets)
-	return built
+	return targets
+	--local built = cross_build(target_prefixes, targets)
+	--return built
 end
 
-parser = clink.arg.new_parser
-
-local files_parser = parser({
-	function(word) clink.matches_are_files() return clink.find_dirs(word.."*", false) end,
-	function(word) return clink.find_files(word.."*", false) end
-})
-
-local msbuild_parser = parser()
-msbuild_parser:set_flags({
+-- flags either without arguments, or with arguments we can't complete
+local plain_flags = {
 	"/help", "/h",
 	"/detailedsummary", "/ds",
 	"/ignoreprojectextensions:", "/ignore:",
@@ -143,28 +169,75 @@ msbuild_parser:set_flags({
 	"/noautoresponse", "/noautorsp",
 	"/nodeReuse", "/nr",
 	"/toolsversion:", "/tv:",
-	"/validate:"..files_parser,
-	"/val:"..files_parser,
-	"/ver", "/validate",
-	cross_build({"/verbosity:", "/v:"},
-				{"q", "quiet", "m", "minimal", "n", "normal", "d", "detailed", "diag", "diagnostic"}),
-
-	cross_build({"/consoleloggerparameters:", "/clp:"},
-				{"PerformanceSummary", "Summary", "NoSummary", "ErrorsOnly", "WarningsOnly",
-				 "NoItemAndPropertyList", "ShowCommandLine", "ShowTimestamp", "ShowEventId",
-				 "ForceNoAlign", "DisableConsoleColor", "DisableMPLogging", "EnableMPLogging",
-				 "Verbosity"}),
+	"/ver", "/version",
 	"/distributedFileLogger", "/dfl",
 	"/distributedlogger:", "/dl:",
 	"/fileLogger", "/fl",
 	"/fileloggerparameters:", "/flp:",
 	"/logger:", "/l:",
 	"/noconsolelogger", "/noconlog"
-})
-msbuild_parser:set_arguments(
-    { files_with_extension_generator({'proj', '.sln'}) },
-	{ build_targets, cross_build(target_prefixes, {"Clean", "Build", "Rebuild"}) }
-)
-msbuild_parser:disable_file_matching()
+}
 
-clink.arg.register_parser("msbuild", msbuild_parser)
+-- flags with arguments we can complete
+local flags_with_arguments = {}
+
+local verbosities = {"q", "quiet", "m", "minimal", "n", "normal", "d", "detailed", "diag", "diagnostic"}
+flags_with_arguments["/verbosity:"] = verbosities
+flags_with_arguments["/v:"] = verbosities
+
+local consoleloggerparameters = {"PerformanceSummary", "Summary", "NoSummary", "ErrorsOnly",
+								 "WarningsOnly", "NoItemAndPropertyList", "ShowCommandLine",
+								 "ShowTimestamp", "ShowEventId", "ForceNoAlign",
+								 "DisableConsoleColor", "DisableMPLogging", "EnableMPLogging",
+								 "Verbosity"}
+flags_with_arguments["/consoleloggerparameters:"] = consoleloggerparameters
+flags_with_arguments["/clp:"] = consoleloggerparameters
+
+flags_with_arguments["/targets:"] = build_targets
+flags_with_arguments["/t:"] = build_targets
+
+-- NB: this doesn't actually list any schemas for some reason
+local schemas_generator = files_with_extension_generator('.xsd')
+flags_with_arguments["/validate:"] = schemas_generator
+flags_with_arguments["/val:"] = schemas_generator
+
+local all_flags = {}
+table_concat(all_flags, plain_flags)
+table_concat(all_flags, table_keys(flags_with_arguments))
+
+local buildable_files_generator = files_with_extension_generator({'proj', '.sln'})
+
+local function msbuild_parser2(text)
+	if not text:starts('/') then
+		return {} -- buildable_files_generator(text)
+	end
+	local idx = text:find(':')
+	if idx == nil then
+		for _, flg in ipairs(all_flags) do
+			if clink.is_match(text, flg) then
+				clink.add_match(flg)
+				if flg:ends(':') then
+					clink.suppress_char_append()
+				end
+			end
+		end
+		return {}
+	end
+
+	local flag = text:sub(0, idx)
+	local follows = flags_with_arguments[flag]
+	if type(follows) == "table" then
+		return cross_build({flag}, follows)
+	end
+	if type(follows) == "function" then
+		return cross_build({flag}, follows(text))
+	end
+end
+
+-- Make assumption that the build file comes first.
+-- This isn't really valid, but it makes things much easier.
+local real_parser = clink.arg.new_parser()
+real_parser:set_arguments({buildable_files_generator}, {msbuild_parser2})
+real_parser:loop(2)
+
+clink.arg.register_parser("msbuild", real_parser)
